@@ -1,5 +1,6 @@
 """"
-Fix the 360 stuff, understand why Weibull is way off
+Fix extrapolation based on the direction
+Understand why Weibull is way off
 Check fit vari
 """
 
@@ -118,7 +119,7 @@ def extrapolate_U2(U1, z_01, z_02, d=11200, h=70):
     hI = h_IBL(d, z_01, z_02)
     u_star2 = u_star1*(1 + np.log(z_02/z_01) / np.log( hI/z_02)  )
     U2 = u_star2*np.log(h/z_02) / k
-    if(abs(U1 - U2) < 1e-1):
+    if(abs(U1 - U2) <= 1e-1):
         print("U1 equal to U2")
     return U2
 
@@ -223,16 +224,14 @@ The request  is not clear on wich approach to follow so we may try both.
 
 df = pd.read_csv("sprog.tsv", sep="\t", header=None)
 
-# 2. Estrai l'anno dalla colonna 0 (timestamp yyyymmddHHMM)
 df['anno'] = df[0].astype(str).str[:4].astype(int)
-
 
 # FILTER
 # replace vals with nan
 df.replace({1: 99.99}, np.nan, inplace=True)
-df.replace({2: 999.}, np.nan, inplace=True)
-df.replace({3:999.}, np.nan, inplace=True)
-
+df.replace({2: 999. }, np.nan, inplace=True)
+df.replace({3: 999. }, np.nan, inplace=True)
+# Drop invalid velocities
 df = df.dropna(subset=[1])
 
 df['dirUni'] = df[2].fillna(df[3])
@@ -241,86 +240,86 @@ df = df.dropna(subset=['dirUni'])
 # Account for the case dirUni = 360
 df['dirUni'] = df['dirUni'].replace( 360, 0 )
 df['slice'] = df['dirUni'].apply(lambda x: floor(x / width) )
-dir_max = int(df['slice'].max())
-print(dir_max)
+dir_max = int(df['slice'].max() +1)
 df['vel'] = df[1]
 
 df.head()
 
-## Approach 1
+## Approach 1 (v_50 in Sprogo and extrapolate)
 
 
 # Matrix containing v50 for each of the 3 method for each direction
 v_50_Sprogo = np.zeros([3, dir_max])
-v_50_Nyborg =  v_50_Sprogo
-v_check = np.zeros(dir_max)
+v_50_Nyborg = np.zeros([3, dir_max])
+v_50_Korsor = np.zeros([3, dir_max])
+v_check     = np.zeros(dir_max)
 # Initialize the vector of maxima
 X = np.zeros(23)
 
+# Plot Weibull fits
 if False:
-    # Plot Weibull fits
     for dir in range(0, int(df['slice'].max()) , 6):
-      ax = df.loc[(df['slice']==dir), 'vel'].plot.hist(column='vel', bins=200, density=True)
-      this = df.loc[df['slice']==dir, 'vel']
-      k, A = fitWeibull_type2_fast(this)
-      k1, A1 = fitWeibull_type1(this)
-      print(f"{k = :.2f}, {A = :.2f}")
-      print(f"{k1 = :.2f}, {A1 = :.2f}")
-      U = np.linspace(0, 25, 100)
-      ax.plot(U, Weibull(k, A, U) , label='fit 2' )
-      ax.plot(U, Weibull(k1, A1, U) , label='fit 1' )
-      plt.title(f"Section {dir*10} - {dir*10 + 10}")
-      plt.legend()
-      plt.show()
+        ax = df.loc[(df['slice']==dir), 'vel'].plot.hist(column='vel', bins=200, density=True)
+        this = df.loc[df['slice']==dir, 'vel']
+        k, A = fitWeibull_type2_fast(this)
+        k1, A1 = fitWeibull_type1(this)
+        print(f"{k = :.2f}, {A = :.2f}")
+        print(f"{k1 = :.2f}, {A1 = :.2f}")
+        U = np.linspace(0, 25, 100)
+        ax.plot(U, Weibull(k, A, U) , label='fit 2' )
+        ax.plot(U, Weibull(k1, A1, U) , label='fit 1' )
+        plt.title(f"Section {dir*10} - {dir*10 + 10}")
+        plt.legend()
+        plt.show()
 
 for dir in range(0, dir_max):
-  to_weib = np.array(df.loc[(df['slice']==dir), 'vel'])
-  v_50_Sprogo[1][dir] = get_V50_Weibull(to_weib, X)
-  for anno in range(1977, 2000):
-    this = np.array(df.loc[(df['anno']==anno) & (df['slice']==dir), 'vel'])
-    X[int(anno - 1977)] = np.max(this)
-  # Riordino il vettore in ordine crescente
-  X = np.sort(X)
-  v_check[dir] = np.mean(X)
-  # Store v_50 in each place for each direction
-  v_50_Sprogo[0][dir] = get_V50_PWM(X)
-  v_50_Sprogo[2][dir] = get_V50_Gumbell(X)
+    to_weib = (df.loc[(df['slice']==dir), 'vel'])
+    v_50_Sprogo[1][dir] = 7*get_V50_Weibull(to_weib, X)
+    for anno in range(1977, 2000):
+        this = np.array(df.loc[(df['anno']==anno) & (df['slice']==dir), 'vel'])
+        X[int(anno - 1977)] = np.max(this)
+    # Riordino il vettore in ordine crescente
+    X = np.sort(X)
+    v_check[dir] = np.mean(X)
+    # Store v_50 in each place for each direction
+    v_50_Sprogo[0][dir] = get_V50_PWM(X)
+    v_50_Sprogo[2][dir] = get_V50_Gumbell(X)
 print("Computed V50 in Sprogo")
-
-if False:
-    plt.plot(v_50_Sprogo[0],'.-', label = 'v 50 PWM')
-    plt.plot(v_50_Sprogo[1],'.-', label = 'v 50 Weibull')
-    plt.plot(v_50_Sprogo[2],'.-', label = 'v 50 Gumbell' )
-    plt.plot(v_check, label = 'Mean of the max' )
-    plt.grid()
-    plt.legend()
-    save('2a_v50Sprogo')
-    plt.show()
 
 # Extrapolate V_50 from Sprogo to Nyborg
 for dir in range(0, int(dir_max) ):
-    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_terra, z0_mare)
-    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_terra, z0_mare)
-    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_terra, z0_mare)
+    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_terra)
+    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_terra)
+    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_terra)
 print("Extrapolated V50 from Sprogo to Nyborg")
 
+# Extrapolate V_50 from Sprogo to Korsor
+for dir in range(0, int(dir_max) ):
+    v_50_Korsor[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_terra, z0_mare)
+    v_50_Korsor[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_terra, z0_mare)
+    v_50_Korsor[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_terra, z0_mare)
+print("Extrapolated V50 from Sprogo to Korsor")
 
-# PLot the v_50 in Sprogo and Nyborg
+# PLot the v_50 in Sprogo Nyborg and Korsor
 if True:
     # Nyborg v_50
-    plt.plot(v_50_Nyborg[0],'.-', label = 'v 50 PWM Nyborg')
-    # plt.plot(v_50_Nyborg[1],'.-', label = 'v 50 Weibull Nyborg')
-    plt.plot(v_50_Nyborg[2],'.-', label = 'v 50 Gumbell Nyborg')
+    plt.plot(v_50_Nyborg[0],'.-',color = 'red', label = 'v 50 PWM Nyborg')
+    plt.plot(v_50_Nyborg[1],'*-',color = 'red', label = 'v 50 Weibull Nyborg')
+    plt.plot(v_50_Nyborg[2],'+-',color = 'red', label = 'v 50 Gumbell Nyborg')
     # Sprogo v_50
+    plt.plot(v_50_Sprogo[0],'.-',color = 'blue', label = 'v 50 PWM Sprogo')
+    plt.plot(v_50_Sprogo[1],'*-',color = 'blue', label = 'v 50 Weibull Sprogo')
+    plt.plot(v_50_Sprogo[2],'+-',color = 'blue', label = 'v 50 Gumbell Sprogo')
+    # Korsor v_50
+    plt.plot(v_50_Korsor[0],'.-',color = 'orange', label = 'v 50 PWM Korsor')
+    plt.plot(v_50_Korsor[1],'*-',color = 'orange', label = 'v 50 Weibull Korsor')
+    plt.plot(v_50_Korsor[2],'+-',color = 'orange', label = 'v 50 Gumbell Korsor')
     """
-    plt.plot(v_50_Sprogo[0],'.-', label = 'v 50 PWM Sprogo')
-    # plt.plot(v_50_Sprogo[1],'.-', label = 'v 50 Weibull Sprogo')
-    plt.plot(v_50_Sprogo[2],'.-', label = 'v 50 Gumbell Sprogo')
     """
-    plt.plot(v_check, label = 'Mean of the max' )
+    plt.plot(v_check, color='black', label = 'Mean of the max' )
     plt.grid()
     plt.legend()
-    save('2a_v50Sprogo')
+    save('2a_v50')
     plt.show()
 
 
@@ -334,3 +333,9 @@ if False:
     plt.grid()
     plt.legend()
     plt.show()
+
+
+
+
+
+

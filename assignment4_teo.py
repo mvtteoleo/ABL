@@ -1,13 +1,17 @@
+""""
+Fix the 360 stuff, understand why Weibull is way off
+Check fit vari
+"""
+
+
+from math import floor
 import pandas as pd
 import numpy as np
-import seaborn as sns
 import scipy as sc
 import sympy as sp
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize_scalar
-from scipy.integrate import quad
-from scipy.special import gamma
 
 save__graph = False
 save_figs   = False
@@ -16,6 +20,30 @@ save_figs   = False
 
 ## Funzioni
 """
+
+def Weibull(k, A, U):
+  return k/A*(U/A)**(k-1)*np.exp(- (U/A)**k )
+
+def fitWeibull_type1(dato):
+  # from scipy import special.gamma
+  mu = np.mean(dato)
+  std = np.std(dato)
+  toll = 1e-5
+  res = 1
+  dk = toll/10
+  k = 0.1 - dk
+
+  cost = (std/mu)**2 +1
+
+  def residual(k):
+      return abs(cost - sc.special.gamma(1+2/k)/(sc.special.gamma(1+1/k))**2)
+  
+  # Minimizzazione numerica rapida
+  res = minimize_scalar(residual, bounds=(0.1, 10), method='bounded')
+  k = res.x
+  A = mu/sc.special.gamma(1+1/k)
+  return k, A
+
 
 # roba di supporto
 def CDF_at_mean(dato):
@@ -30,24 +58,19 @@ def fitWeibull_type2_fast(dato):
     dato = np.array(dato)
     mu = np.mean(dato)
     C = CDF_at_mean(dato)
-    m3_non_central = sc.stats.moment(dato, moment=3)
-
+    m3_non_central = sc.stats.moment(dato, moment=3, axis=0, center=0)
     # Funzione da minimizzare: residuo tra CDF empirica e teorica
     def residual(k):
         gamma_1 = Gamma_Func(1, k)
         dx = 1 - np.exp(-gamma_1**k)
         return abs(C - dx)
-
     # Minimizzazione numerica rapida
     res = minimize_scalar(residual, bounds=(0.1, 10), method='bounded')
     k_opt = res.x
-
     gamma_3 = Gamma_Func(3, k_opt)
     A_opt = np.cbrt(m3_non_central / gamma_3)
-
     return k_opt, A_opt
 
-#
 
 def save(nome):
   if save__graph==True:
@@ -55,16 +78,20 @@ def save(nome):
     plt.tight_layout()
     plt.savefig('figure/'+str(nome)+'.pdf', format='pdf')
     return None
-  else :
+  else:
     return None
 
 
 
+def h_IBL(d, z_01, z_02):
+    M = np.log(z_01/z_02)
+    hI = z_02**0.2 * (0.75 + 0.03*M) * d**0.8
+    return hI
 
 
-def extrapolate_U2(U1, z_01, z_02, d, h=120):
+def extrapolate_U2(U1, z_01, z_02, d=11200, h=70):
     """
-    This functions extrapolates the velocity from position 1 to position 2(Downwind),
+    This functions extrapolates the velocity from position 1(Upwind) to position 2(Downwind),
     Models:
       - Elliot parametrization for h^I
       - Log law => U(z) = u*/k * ln(z/z_0)
@@ -74,6 +101,7 @@ def extrapolate_U2(U1, z_01, z_02, d, h=120):
       - z_01 surface roughness upstream of the source
       - z_02 surface roughness downstrem of the source
       - d distance (positive downwind) --> da mettere in m, positivo nella direzione del vento
+            11,22 Km circa in entrambi i casi
       - h height of the extrapolated U2
 
     output:
@@ -85,12 +113,13 @@ def extrapolate_U2(U1, z_01, z_02, d, h=120):
     .2  <- wind   . 1
     """
     k = 0.4 # Von Karman constant
-## controlla i 70 --> 120 CHECK !!!
+    ## controlla i 70 --> 120 CHECK !!!
     u_star1 = U1*k/np.log(70/z_01)
-    M = np.log(z_01/z_02)
-    hI = z_02 * (0.75 + 0.003*M)*(d/z_02)**0.8
+    hI = h_IBL(d, z_01, z_02)
     u_star2 = u_star1*(1 + np.log(z_02/z_01) / np.log( hI/z_02)  )
     U2 = u_star2*np.log(h/z_02) / k
+    if(abs(U1 - U2) < 1e-1):
+        print("U1 equal to U2")
     return U2
 
 
@@ -102,7 +131,6 @@ def get_V50_PWM(X):
     output: float with V50 using PWM of that sector)
     """
     b0 = np.mean(X)
-
     N = len(X)
     # Compute weights (i-1), i goes from 1 to N → [0, 1, 2, ..., N-1]
     weights = np.arange(N)
@@ -131,7 +159,7 @@ def get_V50_Gumbell(X):
     return v50
 
 
-def get_V50_Weibull(this, X):
+def get_V50_Weibull(this, X, verbose=False):
     """
     input: this: numpy vector with velocities (Specific of the direction, agnostic of the year)
             X: numpy vector of maxima per each year (Specific of the direction, needed just to get the number of years)
@@ -140,58 +168,54 @@ def get_V50_Weibull(this, X):
     output: float with V50 using Weibull method (of that sector)
     Generally the least relyable one ok if all other fail due to lack of datas
     """
-
     # Get A, k from fit Weibull of the datas
-    A, k = fitWeibull_type2_fast(this)
+    # A, k = fitWeibull_type2_fast(this)
+    A, k = fitWeibull_type1(this)
+    # A, k = fitWeibull_type2_fast(X)
     Nu = len(this)
     cie = 0.438*Nu
     beta = A*(np.log(cie))**(1/k)
-    alpha =  A/k*(np.log(cie))**(1/(k-1))
-    N = len(X)
-    v50 = (alpha*np.log(50/N) + beta)
+    alpha =  (A/k)*(np.log(cie))**(1/(k - 1))
+    N = 23 # len(X)
+    v50 = alpha*np.log(50/N) + beta
+    if verbose==True:
+        print("************", dir )
+        print(f"{k = :.2f}")
+        print(f"{A = :.2f}")
+        print(f"{cie = :.2f}")
+        print(f"{Nu = :.2f}")
+        print(f"{beta = :.2f}")
+        print(f"{alpha = :.2f}")
+        print(f"{v50 = :.2f}")
+    """
     if(abs(v50) > 30):
       v50 = 30
       # print(f"{v50 = :.2e}, {alpha = :.2e}, {beta = :.2e} \n")
+    """
     return v50
 
 
 
-def apply_extrapolation(U_dict, z_01, z_02, d):
-    U2_dict = {}
-    for anno, sezioni in U_dict.items():
-        U2_dict[anno] = {}
-        for sezione, lista_U1 in sezioni.items():
-            U2_dict[anno][sezione] = []
-            for U1 in lista_U1:
-                U2 = extrapolate_U2(U1, z_01, z_02, d, 70)
-                U2_dict[anno][sezione].append(U2)
-    return U2_dict
-
-
-
 # dati utili
-abl_height = 669.56909719781
-
-z0_terra = 0.02         #m
-z0_mare = 0.0002        #m
-z_ref = 70              #m
-z = 120                 #m
-z_prime = abl_height *2 #m
-
-
-U_rp = 12       #m/s
-P_rated = 13    #MW
-T = 24 * 365            #hours per year, 365 days
+z0_terra = 2e-2        #m
+z0_mare = 0.02e-2      #m
+z_ref = 70             #m
+z = 120                #m
+width = 10 # Width of the slice
 
 """# Request 2
 
 ## Implementation
 
 In this case we can approach the problem in 2 different ways:
-  1. Obtain $V_{50}$ in Sprogo, extrapolate the data up to geostrophic speed, then by leveraging that the geostrophic velocity is equal in both places and recover by means of $z_0$ $u^*$ and finally by means of $U(z) = \frac{u^*}{k} \,  ln(z/z_0)$ and finally obtain $V_{50}$ in the derived place.
+  1. Obtain $V_{50}$ in Sprogo, extrapolate the data up to geostrophic speed, 
+then by leveraging that the geostrophic velocity is equal in both places 
+and recover by means of $z_0$ $u^*$ and finally by means of $U(z) = \frac{u^*}{k} 
+\,  ln(z/z_0)$ and finally obtain $V_{50}$ in the derived place.
     - this means ```extrapolate_U2``` from Sprogo and then ```get_v50```.
 
-  1. Extrapolate the velocities from 70m to G, again leverage the equivalence, extrapolate back to 70 meters the whole set as before and obtain $V_{50}$ directly with the extrapolated values.
+  1. Extrapolate the velocities from 70m to G, again leverage the equivalence,
+  extrapolate back to 70 meters the whole set as before and obtain $V_{50}$ directly with the extrapolated values.
     - this instead is ```get_V50``` from Sprogo and then ```extrapolateU2```.
 
 The request  is not clear on wich approach to follow so we may try both.
@@ -214,7 +238,11 @@ df = df.dropna(subset=[1])
 df['dirUni'] = df[2].fillna(df[3])
 df = df.dropna(subset=['dirUni'])
 
-df['slice'] = df['dirUni'].apply(lambda x: int(x / 10) )
+# Account for the case dirUni = 360
+df['dirUni'] = df['dirUni'].replace( 360, 0 )
+df['slice'] = df['dirUni'].apply(lambda x: floor(x / width) )
+dir_max = int(df['slice'].max())
+print(dir_max)
 df['vel'] = df[1]
 
 df.head()
@@ -223,46 +251,86 @@ df.head()
 
 
 # Matrix containing v50 for each of the 3 method for each direction
-v_50_Sprogo = np.zeros([3, 36])
-
-v_check = np.zeros([3,36])
-
-# Prepare data to get the V50
-
-
+v_50_Sprogo = np.zeros([3, dir_max])
+v_50_Nyborg =  v_50_Sprogo
+v_check = np.zeros(dir_max)
+# Initialize the vector of maxima
 X = np.zeros(23)
 
-# Prepare data to get the V50
+if False:
+    # Plot Weibull fits
+    for dir in range(0, int(df['slice'].max()) , 6):
+      ax = df.loc[(df['slice']==dir), 'vel'].plot.hist(column='vel', bins=200, density=True)
+      this = df.loc[df['slice']==dir, 'vel']
+      k, A = fitWeibull_type2_fast(this)
+      k1, A1 = fitWeibull_type1(this)
+      print(f"{k = :.2f}, {A = :.2f}")
+      print(f"{k1 = :.2f}, {A1 = :.2f}")
+      U = np.linspace(0, 25, 100)
+      ax.plot(U, Weibull(k, A, U) , label='fit 2' )
+      ax.plot(U, Weibull(k1, A1, U) , label='fit 1' )
+      plt.title(f"Section {dir*10} - {dir*10 + 10}")
+      plt.legend()
+      plt.show()
 
-for dir in range(0, 36, 1):
+for dir in range(0, dir_max):
   to_weib = np.array(df.loc[(df['slice']==dir), 'vel'])
   v_50_Sprogo[1][dir] = get_V50_Weibull(to_weib, X)
-
   for anno in range(1977, 2000):
-
     this = np.array(df.loc[(df['anno']==anno) & (df['slice']==dir), 'vel'])
-
     X[int(anno - 1977)] = np.max(this)
-    # Riordino il vettore in ordine crescente
+  # Riordino il vettore in ordine crescente
   X = np.sort(X)
-
-  v_check[0][dir] = np.mean(X)
+  v_check[dir] = np.mean(X)
   # Store v_50 in each place for each direction
   v_50_Sprogo[0][dir] = get_V50_PWM(X)
-
   v_50_Sprogo[2][dir] = get_V50_Gumbell(X)
+print("Computed V50 in Sprogo")
 
-# Extrapolate to the desired place now
+if False:
+    plt.plot(v_50_Sprogo[0],'.-', label = 'v 50 PWM')
+    plt.plot(v_50_Sprogo[1],'.-', label = 'v 50 Weibull')
+    plt.plot(v_50_Sprogo[2],'.-', label = 'v 50 Gumbell' )
+    plt.plot(v_check, label = 'Mean of the max' )
+    plt.grid()
+    plt.legend()
+    save('2a_v50Sprogo')
+    plt.show()
 
-plt.plot(v_50_Sprogo[0], label = 'v 50 PWM')
-plt.plot(v_50_Sprogo[1], label = 'v 50 Weibull')
-plt.plot(v_50_Sprogo[2], label = 'v 50 Gumbell' )
-
-plt.plot(v_check[0], label = 'Mean of the max' )
-plt.grid()
-plt.legend()
-plt.show()
+# Extrapolate V_50 from Sprogo to Nyborg
+for dir in range(0, int(dir_max) ):
+    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_terra, z0_mare)
+    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_terra, z0_mare)
+    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_terra, z0_mare)
+print("Extrapolated V50 from Sprogo to Nyborg")
 
 
+# PLot the v_50 in Sprogo and Nyborg
+if True:
+    # Nyborg v_50
+    plt.plot(v_50_Nyborg[0],'.-', label = 'v 50 PWM Nyborg')
+    # plt.plot(v_50_Nyborg[1],'.-', label = 'v 50 Weibull Nyborg')
+    plt.plot(v_50_Nyborg[2],'.-', label = 'v 50 Gumbell Nyborg')
+    # Sprogo v_50
+    """
+    plt.plot(v_50_Sprogo[0],'.-', label = 'v 50 PWM Sprogo')
+    # plt.plot(v_50_Sprogo[1],'.-', label = 'v 50 Weibull Sprogo')
+    plt.plot(v_50_Sprogo[2],'.-', label = 'v 50 Gumbell Sprogo')
+    """
+    plt.plot(v_check, label = 'Mean of the max' )
+    plt.grid()
+    plt.legend()
+    save('2a_v50Sprogo')
+    plt.show()
 
 
+# Plot the IBL height in any case the IBL in far heigher than the 70m
+if False:
+    x = np.linspace(0, 11000)
+    plt.hlines(70, 0, 11000, label='70 m reference')
+    plt.plot(x, h_IBL(x, z0_mare, z0_mare), label=r"$h_{IBL}$ sea sea")
+    plt.plot(x, h_IBL(x, z0_terra, z0_mare), label=r"$h_{IBL}$ land sea")
+    plt.plot(x, h_IBL(x, z0_mare, z0_terra), label=r"$h_{IBL}$ sea land")
+    plt.grid()
+    plt.legend()
+    plt.show()

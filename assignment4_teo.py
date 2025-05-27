@@ -5,7 +5,7 @@ Check fit vari
 """
 
 
-from math import floor
+from math import ceil, floor
 import pandas as pd
 import numpy as np
 import scipy as sc
@@ -90,7 +90,7 @@ def h_IBL(d, z_01, z_02):
     return hI
 
 
-def extrapolate_U2(U1, z_01, z_02, d=11200, h=70):
+def extrapolate_U2(U1, z_01, z_02, downwind=True, d=11200, h=70):
     """
     This functions extrapolates the velocity from position 1(Upwind) to position 2(Downwind),
     Models:
@@ -101,30 +101,31 @@ def extrapolate_U2(U1, z_01, z_02, d=11200, h=70):
       - U1 is the velocity at 70 meter in the source (Sprogo)
       - z_01 surface roughness upstream of the source
       - z_02 surface roughness downstrem of the source
-      - d distance (positive downwind) --> da mettere in m, positivo nella direzione del vento
-            11,22 Km circa in entrambi i casi
+      - d distance --> da mettere in m : 11,22 Km circa in entrambi i casi
       - h height of the extrapolated U2
+    
+      - downwind Bool, changes the behaviour of the extrapolation of the u_star2 acccordingly with
+            with the Sempreviva law 
 
     output:
-      - U2 speed at the downstream position at distance d.
+      - U2 speed at the position at distance d.
 
-    when to use it? When I need the velocity in the more downstream position. Eg:
+    downwind == True
+    . 1  -> wind   . 2
 
-    . 1 -> wind   . 2
-    .2  <- wind   . 1
+    downwind == False
+    . 1  <- wind   . 2
     """
     k = 0.4 # Von Karman constant
-    ## controlla i 70 --> 120 CHECK !!!
     u_star1 = U1*k/np.log(70/z_01)
-    hI = h_IBL(d, z_01, z_02)
-    u_star2 = u_star1*(1 + np.log(z_02/z_01) / np.log( hI/z_02)  )
+    if downwind == True:
+        hI = h_IBL(d, z_01, z_02)
+        u_star2 = u_star1*( np.log(hI/z_01) / np.log( hI/z_02) )
+    else:
+        hI = h_IBL(d, z_02, z_01)
+        u_star2 = u_star1*( np.log(hI/z_02) / np.log( hI/z_01) )
     U2 = u_star2*np.log(h/z_02) / k
-    if(abs(U1 - U2) <= 1e-1):
-        print("U1 equal to U2")
     return U2
-
-
-
 
 def get_V50_PWM(X):
     """
@@ -170,9 +171,7 @@ def get_V50_Weibull(this, X, verbose=False):
     Generally the least relyable one ok if all other fail due to lack of datas
     """
     # Get A, k from fit Weibull of the datas
-    # A, k = fitWeibull_type2_fast(this)
     A, k = fitWeibull_type1(this)
-    # A, k = fitWeibull_type2_fast(X)
     Nu = len(this)
     cie = 0.438*Nu
     beta = A*(np.log(cie))**(1/k)
@@ -202,7 +201,7 @@ z0_terra = 2e-2        #m
 z0_mare = 0.02e-2      #m
 z_ref = 70             #m
 z = 120                #m
-width = 10 # Width of the slice
+width = 5 # Width of the slice
 
 """# Request 2
 
@@ -272,6 +271,9 @@ if False:
         plt.legend()
         plt.show()
 
+
+
+# Get V50 in Sprogo
 for dir in range(0, dir_max):
     to_weib = (df.loc[(df['slice']==dir), 'vel'])
     v_50_Sprogo[1][dir] = 7*get_V50_Weibull(to_weib, X)
@@ -287,29 +289,39 @@ for dir in range(0, dir_max):
 print("Computed V50 in Sprogo")
 
 # Extrapolate V_50 from Sprogo to Nyborg
-for dir in range(0, int(dir_max) ):
-    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_terra)
-    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_terra)
-    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_terra)
-print("Extrapolated V50 from Sprogo to Nyborg")
+for dir in range(0, ceil(dir_max/2 - 0.5) ):
+    # Nyborg sea Sprogo sea <- Wind
+    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_mare )
+    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_mare )
+    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_mare )
+    # Sprogo sea Korsor land <- Wind
+    v_50_Korsor[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_terra, z0_mare, False)
+    v_50_Korsor[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_terra, z0_mare, False)
+    v_50_Korsor[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_terra, z0_mare, False)
+print(f"Extrapolated V50 from easterly directions up to {dir = }")
 
 # Extrapolate V_50 from Sprogo to Korsor
-for dir in range(0, int(dir_max) ):
-    v_50_Korsor[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_terra, z0_mare)
-    v_50_Korsor[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_terra, z0_mare)
-    v_50_Korsor[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_terra, z0_mare)
-print("Extrapolated V50 from Sprogo to Korsor")
+for dir in range(ceil(dir_max/2 - 0.5), dir_max):
+    # Wind -> land Nyborg sea Sprogo
+    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_terra, z0_mare, False)
+    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_terra, z0_mare, False)
+    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_terra, z0_mare, False)
+    # Wind -> sea Sprogo sea Kors
+    v_50_Korsor[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_mare )
+    v_50_Korsor[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_mare )
+    v_50_Korsor[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_mare )
+print(f"Extrapolated V50 from weasterly directions up to {dir = }")
 
 # PLot the v_50 in Sprogo Nyborg and Korsor
 if True:
-    # Nyborg v_50
-    plt.plot(v_50_Nyborg[0],'.-',color = 'red', label = 'v 50 PWM Nyborg')
-    plt.plot(v_50_Nyborg[1],'*-',color = 'red', label = 'v 50 Weibull Nyborg')
-    plt.plot(v_50_Nyborg[2],'+-',color = 'red', label = 'v 50 Gumbell Nyborg')
     # Sprogo v_50
     plt.plot(v_50_Sprogo[0],'.-',color = 'blue', label = 'v 50 PWM Sprogo')
     plt.plot(v_50_Sprogo[1],'*-',color = 'blue', label = 'v 50 Weibull Sprogo')
     plt.plot(v_50_Sprogo[2],'+-',color = 'blue', label = 'v 50 Gumbell Sprogo')
+    # Nyborg v_50
+    plt.plot(v_50_Nyborg[0],'.-',color = 'red', label = 'v 50 PWM Nyborg')
+    plt.plot(v_50_Nyborg[1],'*-',color = 'red', label = 'v 50 Weibull Nyborg')
+    plt.plot(v_50_Nyborg[2],'+-',color = 'red', label = 'v 50 Gumbell Nyborg')
     # Korsor v_50
     plt.plot(v_50_Korsor[0],'.-',color = 'orange', label = 'v 50 PWM Korsor')
     plt.plot(v_50_Korsor[1],'*-',color = 'orange', label = 'v 50 Weibull Korsor')
@@ -317,8 +329,14 @@ if True:
     """
     """
     plt.plot(v_check, color='black', label = 'Mean of the max' )
+    max = np.maximum( v_50_Korsor, v_50_Nyborg) 
+    min = np.minimum( v_50_Korsor, v_50_Nyborg) 
+    y = np.linspace(np.min(min) -5 , np.max(max) +5 )
+    plt.fill_betweenx( y, 0, (dir_max/2 - 0.5), facecolor='red', alpha=0.2)
+    plt.fill_betweenx( y, (dir_max/2 - 0.5),dir_max-1, facecolor='green', alpha=0.2)
     plt.grid()
     plt.legend()
+    plt.title(rf"$V_{50}$ with the 3 methods for each sector. Procedure 1($V_{50}$ in Sprogo and then extrapolate), slice of {width = } °")
     save('2a_v50')
     plt.show()
 
@@ -336,6 +354,8 @@ if False:
 
 
 
+# Approach 2
 
+# Extrapolate from Sprogo
 
 

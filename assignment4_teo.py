@@ -176,7 +176,7 @@ def get_V50_Weibull(this, X, verbose=False):
     cie = 0.438*Nu
     beta = A*(np.log(cie))**(1/k)
     alpha =  (A/k)*(np.log(cie))**(1/(k - 1))
-    N = 23 # len(X)
+    N = len(X)
     v50 = alpha*np.log(50/N) + beta
     if verbose==True:
         print("************", dir )
@@ -201,7 +201,7 @@ z0_terra = 2e-2        #m
 z0_mare = 0.02e-2      #m
 z_ref = 70             #m
 z = 120                #m
-width = 5 # Width of the slice
+width = 20 # Width of the slice
 
 """# Request 2
 
@@ -291,41 +291,41 @@ print("Computed V50 in Sprogo")
 # Extrapolate V_50 from Sprogo to Nyborg
 for dir in range(0, ceil(dir_max/2 - 0.5) ):
     # Nyborg sea Sprogo sea <- Wind
-    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_mare )
-    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_mare )
-    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_mare )
+    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_terra)
+    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_terra)
+    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_terra)
     # Sprogo sea Korsor land <- Wind
-    v_50_Korsor[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_terra, z0_mare, False)
-    v_50_Korsor[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_terra, z0_mare, False)
-    v_50_Korsor[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_terra, z0_mare, False)
+    v_50_Korsor[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_terra, False)
+    v_50_Korsor[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_terra, False)
+    v_50_Korsor[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_terra, False)
 print(f"Extrapolated V50 from easterly directions up to {dir = }")
 
 # Extrapolate V_50 from Sprogo to Korsor
 for dir in range(ceil(dir_max/2 - 0.5), dir_max):
     # Wind -> land Nyborg sea Sprogo
-    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_terra, z0_mare, False)
-    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_terra, z0_mare, False)
-    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_terra, z0_mare, False)
+    v_50_Nyborg[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_terra, False)
+    v_50_Nyborg[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_terra, False)
+    v_50_Nyborg[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_terra, False)
     # Wind -> sea Sprogo sea Kors
-    v_50_Korsor[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_mare )
-    v_50_Korsor[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_mare )
-    v_50_Korsor[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_mare )
+    v_50_Korsor[0][dir] = extrapolate_U2(v_50_Sprogo[0][dir], z0_mare, z0_terra )
+    v_50_Korsor[1][dir] = extrapolate_U2(v_50_Sprogo[1][dir], z0_mare, z0_terra)
+    v_50_Korsor[2][dir] = extrapolate_U2(v_50_Sprogo[2][dir], z0_mare, z0_terra)
 print(f"Extrapolated V50 from weasterly directions up to {dir = }")
 
 # PLot the v_50 in Sprogo Nyborg and Korsor
 if True:
     # Sprogo v_50
-    plt.plot(v_50_Sprogo[0],'.-',color = 'blue', label = 'v 50 PWM Sprogo')
-    plt.plot(v_50_Sprogo[1],'*-',color = 'blue', label = 'v 50 Weibull Sprogo')
-    plt.plot(v_50_Sprogo[2],'+-',color = 'blue', label = 'v 50 Gumbell Sprogo')
+    plt.plot(v_50_Sprogo[0],'.-',color = 'blue', label = f'v_{{50}} PWM Sprogo')
+    plt.plot(v_50_Sprogo[1],'*-',color = 'blue', label = f'v_{{50}} Weibull Sprogo')
+    plt.plot(v_50_Sprogo[2],'+-',color = 'blue', label = f'v_{{50}} Gumbell Sprogo')
     # Nyborg v_50
-    plt.plot(v_50_Nyborg[0],'.-',color = 'red', label = 'v 50 PWM Nyborg')
-    plt.plot(v_50_Nyborg[1],'*-',color = 'red', label = 'v 50 Weibull Nyborg')
-    plt.plot(v_50_Nyborg[2],'+-',color = 'red', label = 'v 50 Gumbell Nyborg')
+    plt.plot(v_50_Nyborg[0],'.-',color = 'green', label = f'v_{{50}} PWM Nyborg')
+    plt.plot(v_50_Nyborg[1],'*-',color = 'green', label = f'v_{{50}} Weibull Nyborg')
+    plt.plot(v_50_Nyborg[2],'+-',color = 'green', label = f'v_{{50}} Gumbell Nyborg')
     # Korsor v_50
-    plt.plot(v_50_Korsor[0],'.-',color = 'orange', label = 'v 50 PWM Korsor')
-    plt.plot(v_50_Korsor[1],'*-',color = 'orange', label = 'v 50 Weibull Korsor')
-    plt.plot(v_50_Korsor[2],'+-',color = 'orange', label = 'v 50 Gumbell Korsor')
+    plt.plot(v_50_Korsor[0],'.-',color = 'red', label = f'v_{{50}} PWM Korsor')
+    plt.plot(v_50_Korsor[1],'*-',color = 'red', label = f'v_{{50}} Weibull Korsor')
+    plt.plot(v_50_Korsor[2],'+-',color = 'red', label = f'v_{{50}} Gumbell Korsor')
     """
     """
     plt.plot(v_check, color='black', label = 'Mean of the max' )
@@ -336,7 +336,9 @@ if True:
     plt.fill_betweenx( y, (dir_max/2 - 0.5),dir_max-1, facecolor='green', alpha=0.2)
     plt.grid()
     plt.legend()
-    plt.title(rf"$V_{50}$ with the 3 methods for each sector. Procedure 1($V_{50}$ in Sprogo and then extrapolate), slice of {width = } °")
+    plt.title(rf"$V_{{50}}$ with the 3 methods for each sector. Procedure 1($V_{{50}}$ in Sprogo and then extrapolate), slice of {width = } °")
+    xticks = range(0, dir_max)
+    plt.xticks( ticks=xticks, labels=[f"{(2*x+1) * width/2 :.0f}° " for x in xticks], rotation=45)
     save('2a_v50')
     plt.show()
 

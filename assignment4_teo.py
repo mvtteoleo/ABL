@@ -77,7 +77,7 @@ def save(nome):
   if save__graph==True:
     plt.legend()
     plt.tight_layout()
-    plt.savefig('figure/'+str(nome)+'.pdf', format='pdf')
+    plt.savefig('content/figure/'+str(nome)+'.pdf', format='pdf')
     return None
   else:
     return None
@@ -421,6 +421,7 @@ if True:
     # ax.legend()
 
     plt.tight_layout()
+    save('Polar_v50')
     plt.show()
 
 

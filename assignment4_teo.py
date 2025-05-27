@@ -313,34 +313,116 @@ for dir in range(ceil(dir_max/2 - 0.5), dir_max):
 print(f"Extrapolated V50 from weasterly directions up to {dir = }")
 
 # PLot the v_50 in Sprogo Nyborg and Korsor
-if True:
+if False:
     # Sprogo v_50
-    plt.plot(v_50_Sprogo[0],'.-',color = 'blue', label = f'v_{{50}} PWM Sprogo')
-    plt.plot(v_50_Sprogo[1],'*-',color = 'blue', label = f'v_{{50}} Weibull Sprogo')
-    plt.plot(v_50_Sprogo[2],'+-',color = 'blue', label = f'v_{{50}} Gumbell Sprogo')
+    plt.plot(v_50_Sprogo[0],'o-',color = 'orange', label = rf"$V_{{50, PWM }}$ in Sprogo")
+    plt.plot(v_50_Sprogo[1],'s-',color = 'orange', label = rf'$V_{{50,Weibull }}$ in Sprogo')
+    plt.plot(v_50_Sprogo[2],'^-',color = 'orange', label = f'$V_{{50,Gumbell }}$ in  Sprogo')
     # Nyborg v_50
-    plt.plot(v_50_Nyborg[0],'.-',color = 'green', label = f'v_{{50}} PWM Nyborg')
-    plt.plot(v_50_Nyborg[1],'*-',color = 'green', label = f'v_{{50}} Weibull Nyborg')
-    plt.plot(v_50_Nyborg[2],'+-',color = 'green', label = f'v_{{50}} Gumbell Nyborg')
+    plt.plot(v_50_Nyborg[0],'o-',color = 'green', label = f'$V_{{50,PWM }}$ in Nyborg')
+    plt.plot(v_50_Nyborg[1],'s-',color = 'green', label = f'$V_{{50,Weibull }}$ in Nyborg')
+    plt.plot(v_50_Nyborg[2],'^-',color = 'green', label = f'$V_{{50,Gumbell }}$ in Nyborg')
     # Korsor v_50
-    plt.plot(v_50_Korsor[0],'.-',color = 'red', label = f'v_{{50}} PWM Korsor')
-    plt.plot(v_50_Korsor[1],'*-',color = 'red', label = f'v_{{50}} Weibull Korsor')
-    plt.plot(v_50_Korsor[2],'+-',color = 'red', label = f'v_{{50}} Gumbell Korsor')
+    plt.plot(v_50_Korsor[0],'o-',color = 'red', label = f'$V_{{50,PWM }}$ in Korsor')
+    plt.plot(v_50_Korsor[1],'s-',color = 'red', label = f'$V_{{50,Weibull }}$ in Korsor')
+    plt.plot(v_50_Korsor[2],'^-',color = 'red', label = f'$V_{{50,Gumbell }}$ in Korsor')
     """
     """
     plt.plot(v_check, color='black', label = 'Mean of the max' )
     max = np.maximum( v_50_Korsor, v_50_Nyborg) 
     min = np.minimum( v_50_Korsor, v_50_Nyborg) 
-    y = np.linspace(np.min(min) -5 , np.max(max) +5 )
-    plt.fill_betweenx( y, 0, (dir_max/2 - 0.5), facecolor='red', alpha=0.2)
-    plt.fill_betweenx( y, (dir_max/2 - 0.5),dir_max-1, facecolor='green', alpha=0.2)
+    y = np.linspace(np.min(min)-3 , np.max(max)+3 )
+    plt.fill_betweenx( y, 0, (dir_max/2 - 0.5), facecolor='red', alpha=0.1)
+    plt.fill_betweenx( y, (dir_max/2 - 0.5),dir_max-1, facecolor='green', alpha=0.1)
     plt.grid()
-    plt.legend()
+    from matplotlib.lines import Line2D
+    # Custom legend items for methods (marker shape)
+    method_legend = [
+        Line2D([0], [0], marker='o', color='black', linestyle='None', label='PWM'),
+        Line2D([0], [0], marker='s', color='black', linestyle='None', label='Weibull'),
+        Line2D([0], [0], marker='^', color='black', linestyle='None', label='Gumbell'),
+        Line2D([0], [0], marker='.', color='orange', label='Sprogo'),
+        Line2D([0], [0], marker='.', color='green', label='Nyborg'),
+        Line2D([0], [0], marker='.', color='red', label='Korsor'),
+    ]
+
+    # Add method legend first, then location
+    method_legend_handle = plt.legend(handles=method_legend, title='Method and location')
+
     plt.title(rf"$V_{{50}}$ with the 3 methods for each sector. Procedure 1($V_{{50}}$ in Sprogo and then extrapolate), slice of {width = } °")
     xticks = range(0, dir_max)
     plt.xticks( ticks=xticks, labels=[f"{(2*x+1) * width/2 :.0f}° " for x in xticks], rotation=45)
     save('2a_v50')
     plt.show()
+
+
+
+if True:
+    theta = np.radians([(2*x+1) * width/2 for x in range(dir_max)])  # Direction in degrees to radians
+
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
+
+    # Sprogo v_50
+    ax.plot(theta, v_50_Sprogo[0], 'o-', color='orange', label=rf"$V_{{50, PWM}}$ in Sprogo")
+    ax.plot(theta, v_50_Sprogo[1], 's-', color='orange', label=rf"$V_{{50, Weibull}}$ in Sprogo")
+    ax.plot(theta, v_50_Sprogo[2], '^-', color='orange', label=rf"$V_{{50, Gumbell}}$ in Sprogo")
+
+    """
+    # Nyborg v_50
+    ax.plot(theta, v_50_Nyborg[0], 'o-', color='green', label=rf"$V_{{50, PWM}}$ in Nyborg")
+    ax.plot(theta, v_50_Nyborg[1], 's-', color='green', label=rf"$V_{{50, Weibull}}$ in Nyborg")
+    ax.plot(theta, v_50_Nyborg[2], '^-', color='green', label=rf"$V_{{50, Gumbell}}$ in Nyborg")
+
+    # Korsor v_50
+    ax.plot(theta, v_50_Korsor[0], 'o-', color='red', label=rf"$V_{{50, PWM}}$ in Korsor")
+    ax.plot(theta, v_50_Korsor[1], 's-', color='red', label=rf"$V_{{50, Weibull}}$ in Korsor")
+    ax.plot(theta, v_50_Korsor[2], '^-', color='red', label=rf"$V_{{50, Gumbell}}$ in Korsor")
+    """
+
+    # Mean check line
+    ax.plot(theta, v_check, '*', color='black', label='Mean of the max')
+
+    # Optional: shaded sectors (convert sector boundaries to radians)
+    theta_min = np.radians(0)
+    theta_mid = np.radians((dir_max/2 - 0.5) * width)
+    theta_max = np.radians((dir_max) * width)
+
+    r = np.linspace(np.min(np.minimum(v_50_Korsor, v_50_Nyborg)) - 3,
+                    np.max(np.maximum(v_50_Korsor, v_50_Nyborg)) + 3, 100)
+
+    theta_fill = np.linspace(theta_min, theta_mid, 100)
+    ax.fill_between(theta_fill, r[0], r[-1], color='red', alpha=0.1)
+
+    theta_fill = np.linspace(theta_mid, theta_max, 100)
+    ax.fill_between(theta_fill, r[0], r[-1], color='green', alpha=0.1)
+
+    ax.set_theta_zero_location('N')  # 0° at the top
+    ax.set_theta_direction(-1)       # Clockwise
+
+    ax.set_title(rf"$V_{{50}}$ with the 3 methods for each sector. Procedure 1 ($V_{{50}}$ in Sprogo and extrapolate), slice of {width = }°", pad=20)
+
+
+    from matplotlib.lines import Line2D
+    # Custom legend items for methods (marker shape)
+    method_legend = [
+        Line2D([0], [0], marker='o', color='black', linestyle='None', label='PWM'),
+        Line2D([0], [0], marker='s', color='black', linestyle='None', label='Weibull'),
+        Line2D([0], [0], marker='^', color='black', linestyle='None', label='Gumbell'),
+        Line2D([0], [0], marker='*', color='black', linestyle='None', label='Mean of the Max \n(Sprogo only)'),
+        Line2D([0], [0], marker='.', color='orange', label='Sprogo'),
+        Line2D([0], [0], marker='.', color='green', label='Nyborg'),
+        Line2D([0], [0], marker='.', color='red', label='Korsor'),
+    ]
+
+    # Add method legend first, then location
+    method_legend_handle = ax.legend(handles=method_legend, title='Method and location')
+
+
+    # ax.legend()
+
+    plt.tight_layout()
+    plt.show()
+
 
 
 # Plot the IBL height in any case the IBL in far heigher than the 70m

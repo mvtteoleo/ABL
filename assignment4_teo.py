@@ -1,10 +1,7 @@
-""""
-Fix extrapolation based on the direction
-Understand why Weibull is way off
-Check fit vari
 """
-
-
+Fai secondo metodo
+Turbine class
+"""
 from math import ceil, floor
 import pandas as pd
 import numpy as np
@@ -13,15 +10,6 @@ import sympy as sp
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize_scalar
-
-save__graph = True 
-save_figs   = False
-
-"""i due modi per ottenere i param della weibull
-
-## Funzioni
-"""
-
 def Weibull(k, A, U):
   return k/A*(U/A)**(k-1)*np.exp(- (U/A)**k )
 
@@ -75,8 +63,9 @@ def fitWeibull_type2_fast(dato):
 
 def save(nome):
   if save__graph==True:
-    plt.legend()
     plt.tight_layout()
+    figure = plt.gcf()  # get current figure
+    figure.set_size_inches(10, 10)
     plt.savefig('figure/'+str(nome)+'.pdf', format='pdf')
     return None
   else:
@@ -118,11 +107,10 @@ def extrapolate_U2(U1, z_01, z_02, downwind=True, d=11200, h=70):
     """
     k = 0.4 # Von Karman constant
     u_star1 = U1*k/np.log(70/z_01)
+    hI = h_IBL(d, z_01, z_02)
     if downwind == True:
-        hI = h_IBL(d, z_01, z_02)
         u_star2 = u_star1*( np.log(hI/z_01) / np.log( hI/z_02) )
     else:
-        hI = h_IBL(d, z_02, z_01)
         u_star2 = u_star1*( np.log(hI/z_02) / np.log( hI/z_01) )
     U2 = u_star2*np.log(h/z_02) / k
     return U2
@@ -192,7 +180,16 @@ def get_V50_Weibull(this, X, verbose=False):
       v50 = 30
       # print(f"{v50 = :.2e}, {alpha = :.2e}, {beta = :.2e} \n")
     """
-    return v50
+    return v50*7
+
+
+save__graph = True 
+save_figs   = False
+
+"""i due modi per ottenere i param della weibull
+
+## Funzioni
+"""
 
 
 
@@ -201,25 +198,27 @@ z0_terra = 2e-2        #m
 z0_mare = 0.02e-2      #m
 z_ref = 70             #m
 z = 120                #m
-width = 20 # Width of the slice
+width = 90 # Width of the slice
 
-"""# Request 2
 
-## Implementation
+# # %%
+# Request 2
+# 
+# ## Implementation
+# 
+# In this case we can approach the problem in 2 different ways:
+#   1. Obtain $V_{50}$ in Sprogo, extrapolate the data up to geostrophic speed, 
+# then by leveraging that the geostrophic velocity is equal in both places 
+# and recover by means of $z_0$ $u^*$ and finally by means of $U(z) = \frac{u^*}{k} 
+# \,  ln(z/z_0)$ and finally obtain $V_{50}$ in the derived place.
+#     - this means ```extrapolate_U2``` from Sprogo and then ```get_v50```.
+# 
+#   1. Extrapolate the velocities from 70m to G, again leverage the equivalence,
+#   extrapolate back to 70 meters the whole set as before and obtain $V_{50}$ directly with the extrapolated values.
+#     - this instead is ```get_V50``` from Sprogo and then ```extrapolateU2```.
+# 
+# The request  is not clear on wich approach to follow so we may try both.
 
-In this case we can approach the problem in 2 different ways:
-  1. Obtain $V_{50}$ in Sprogo, extrapolate the data up to geostrophic speed, 
-then by leveraging that the geostrophic velocity is equal in both places 
-and recover by means of $z_0$ $u^*$ and finally by means of $U(z) = \frac{u^*}{k} 
-\,  ln(z/z_0)$ and finally obtain $V_{50}$ in the derived place.
-    - this means ```extrapolate_U2``` from Sprogo and then ```get_v50```.
-
-  1. Extrapolate the velocities from 70m to G, again leverage the equivalence,
-  extrapolate back to 70 meters the whole set as before and obtain $V_{50}$ directly with the extrapolated values.
-    - this instead is ```get_V50``` from Sprogo and then ```extrapolateU2```.
-
-The request  is not clear on wich approach to follow so we may try both.
-"""
 
 df = pd.read_csv("sprog.tsv", sep="\t", header=None)
 
@@ -244,8 +243,9 @@ df['vel'] = df[1]
 
 df.head()
 
-## Approach 1 (v_50 in Sprogo and extrapolate)
 
+
+## APPROACH 1 (V_50 IN SPROGO AND EXTRAPOLATE)
 
 # Matrix containing v50 for each of the 3 method for each direction
 v_50_Sprogo = np.zeros([3, dir_max])
@@ -271,12 +271,22 @@ if False:
         plt.legend()
         plt.show()
 
+# Plot the IBL height in any case the IBL in far heigher than the 70m
+if False:
+    x = np.linspace(0, 11000)
+    plt.hlines(70, 0, 11000, label='70 m reference')
+    plt.plot(x, h_IBL(x, z0_mare, z0_mare), label=r"$h_{IBL}$ sea sea")
+    plt.plot(x, h_IBL(x, z0_terra, z0_mare), label=r"$h_{IBL}$ land sea")
+    plt.plot(x, h_IBL(x, z0_mare, z0_terra), label=r"$h_{IBL}$ sea land")
+    plt.grid()
+    plt.legend()
+    plt.show()
 
 
 # Get V50 in Sprogo
 for dir in range(0, dir_max):
     to_weib = (df.loc[(df['slice']==dir), 'vel'])
-    v_50_Sprogo[1][dir] = 7*get_V50_Weibull(to_weib, X)
+    v_50_Sprogo[1][dir] = get_V50_Weibull(to_weib, X)
     for anno in range(1977, 2000):
         this = np.array(df.loc[(df['anno']==anno) & (df['slice']==dir), 'vel'])
         X[int(anno - 1977)] = np.max(this)
@@ -313,22 +323,22 @@ for dir in range(ceil(dir_max/2 - 0.5), dir_max):
 print(f"Extrapolated V50 from weasterly directions up to {dir = }")
 
 # PLot the v_50 in Sprogo Nyborg and Korsor
-if False:
+if True:
     # Sprogo v_50
-    plt.plot(v_50_Sprogo[0],'o-',color = 'orange', label = rf"$V_{{50, PWM }}$ in Sprogo")
-    plt.plot(v_50_Sprogo[1],'s-',color = 'orange', label = rf'$V_{{50,Weibull }}$ in Sprogo')
-    plt.plot(v_50_Sprogo[2],'^-',color = 'orange', label = f'$V_{{50,Gumbell }}$ in  Sprogo')
+    plt.plot(v_50_Sprogo[0],'o-',color = 'orange')
+    plt.plot(v_50_Sprogo[1],'s-',color = 'orange')
+    plt.plot(v_50_Sprogo[2],'^-',color = 'orange')
     # Nyborg v_50
-    plt.plot(v_50_Nyborg[0],'o-',color = 'green', label = f'$V_{{50,PWM }}$ in Nyborg')
-    plt.plot(v_50_Nyborg[1],'s-',color = 'green', label = f'$V_{{50,Weibull }}$ in Nyborg')
-    plt.plot(v_50_Nyborg[2],'^-',color = 'green', label = f'$V_{{50,Gumbell }}$ in Nyborg')
+    plt.plot(v_50_Nyborg[0],'o-',color = 'green')
+    plt.plot(v_50_Nyborg[1],'s-',color = 'green')
+    plt.plot(v_50_Nyborg[2],'^-',color = 'green')
     # Korsor v_50
-    plt.plot(v_50_Korsor[0],'o-',color = 'red', label = f'$V_{{50,PWM }}$ in Korsor')
-    plt.plot(v_50_Korsor[1],'s-',color = 'red', label = f'$V_{{50,Weibull }}$ in Korsor')
-    plt.plot(v_50_Korsor[2],'^-',color = 'red', label = f'$V_{{50,Gumbell }}$ in Korsor')
+    plt.plot(v_50_Korsor[0],'o-',color = 'red')
+    plt.plot(v_50_Korsor[1],'s-',color = 'red')
+    plt.plot(v_50_Korsor[2],'^-',color = 'red')
     """
     """
-    plt.plot(v_check, color='black', label = 'Mean of the max' )
+    plt.plot(v_check, color='black')
     max = np.maximum( v_50_Korsor, v_50_Nyborg) 
     min = np.minimum( v_50_Korsor, v_50_Nyborg) 
     y = np.linspace(np.min(min)-3 , np.max(max)+3 )
@@ -363,20 +373,18 @@ if True:
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
 
     # Sprogo v_50
-    ax.plot(theta, v_50_Sprogo[0], 'o-', color='orange', label=rf"$V_{{50, PWM}}$ in Sprogo")
-    ax.plot(theta, v_50_Sprogo[1], 's-', color='orange', label=rf"$V_{{50, Weibull}}$ in Sprogo")
-    ax.plot(theta, v_50_Sprogo[2], '^-', color='orange', label=rf"$V_{{50, Gumbell}}$ in Sprogo")
-
-    """
+    ax.plot(theta, v_50_Sprogo[0], 'o-', color='orange')
+    ax.plot(theta, v_50_Sprogo[1], 's-', color='orange')
+    ax.plot(theta, v_50_Sprogo[2], '^-', color='orange')
     # Nyborg v_50
-    ax.plot(theta, v_50_Nyborg[0], 'o-', color='green', label=rf"$V_{{50, PWM}}$ in Nyborg")
-    ax.plot(theta, v_50_Nyborg[1], 's-', color='green', label=rf"$V_{{50, Weibull}}$ in Nyborg")
-    ax.plot(theta, v_50_Nyborg[2], '^-', color='green', label=rf"$V_{{50, Gumbell}}$ in Nyborg")
-
+    ax.plot(theta, v_50_Nyborg[0], 'o-', color='green')
+    ax.plot(theta, v_50_Nyborg[1], 's-', color='green')
+    ax.plot(theta, v_50_Nyborg[2], '^-', color='green')
     # Korsor v_50
-    ax.plot(theta, v_50_Korsor[0], 'o-', color='red', label=rf"$V_{{50, PWM}}$ in Korsor")
-    ax.plot(theta, v_50_Korsor[1], 's-', color='red', label=rf"$V_{{50, Weibull}}$ in Korsor")
-    ax.plot(theta, v_50_Korsor[2], '^-', color='red', label=rf"$V_{{50, Gumbell}}$ in Korsor")
+    ax.plot(theta, v_50_Korsor[0], 'o-', color='red')
+    ax.plot(theta, v_50_Korsor[1], 's-', color='red')
+    ax.plot(theta, v_50_Korsor[2], '^-', color='red')
+    """
     """
 
     # Mean check line
@@ -421,26 +429,44 @@ if True:
     # ax.legend()
 
     plt.tight_layout()
-    save('Polar_v50')
+    save('2a_Polar_v50')
     plt.show()
 
 
 
-# Plot the IBL height in any case the IBL in far heigher than the 70m
-if False:
-    x = np.linspace(0, 11000)
-    plt.hlines(70, 0, 11000, label='70 m reference')
-    plt.plot(x, h_IBL(x, z0_mare, z0_mare), label=r"$h_{IBL}$ sea sea")
-    plt.plot(x, h_IBL(x, z0_terra, z0_mare), label=r"$h_{IBL}$ land sea")
-    plt.plot(x, h_IBL(x, z0_mare, z0_terra), label=r"$h_{IBL}$ sea land")
-    plt.grid()
-    plt.legend()
-    plt.show()
 
-
-
-# Approach 2
-
-# Extrapolate from Sprogo
-
-
+### ## APPROACH 2 (EXTRAPOLATE FROM SPROGO AND GET  V50 IN PLACE)
+### 
+### # Extrapolate from Sprogo
+### # Case : wind -> land Sprogo sea (d) place_
+### df['Nyborg'] = df['vel'].apply(lambda x: extrapolate_U2(x, z0_terra, z0_mare) )
+### df['Korsor'] = df['vel'].apply(lambda x: extrapolate_U2(x, z0_terra, z0_mare) )
+### 
+### #filter if the there is land upwind
+### # Case : wind -> land place_ sea (d) Sprogo
+### df['Nyborg'] = df.loc[ (df['dirUni'] > 158 ) & (df['dirUni'] < 338), 'Nyborg' ].apply(lambda x: extrapolate_U2(x, z0_terra, z0_mare, downwind=False))
+### df['Korsor'] = df['Korsor'].loc[ (df['dirUni'] > 133 ) & (df['dirUni'] < 313) ].apply(lambda x: extrapolate_U2(x, z0_terra, z0_mare, downwind=False))
+### 
+### # GET V_50
+### # Matrix containing v50 for each of the 3 method for each direction
+### v_50_Nyborg = np.zeros([3, dir_max])
+### v_50_Korsor = np.zeros([3, dir_max])
+### v_check     = np.zeros(dir_max)
+### # Initialize the vector of maxima
+### X = np.zeros(23)
+### 
+### for dir in range(0, dir_max):
+###     to_weib = np.array(df.loc[(df['slice']==dir), 'Nyborg'])
+###     v_50_Nyborg[1][dir] = get_V50_Weibull(to_weib, X)
+###     for anno in range(1977, 2000):
+###         this = np.array(df.loc[(df['anno']==anno) & (df['slice']==dir), 'Nyborg'])
+###         X[int(anno - 1977)] = np.max(this)
+###     # Riordino il vettore in ordine crescente
+###     X = np.sort(X)
+###     v_check[dir] = np.mean(X)
+###     # Store v_50 in each place for each direction
+###     v_50_Nyborg[0][dir] = get_V50_PWM(X)
+###     # v_50_Nyborg[2][dir] = get_V50_Gumbell(X)
+###  
+### plt.plot(v_50_Nyborg[0])
+### plt.show()

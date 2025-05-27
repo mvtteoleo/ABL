@@ -14,7 +14,7 @@ import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize_scalar
 
-save__graph = False
+save__graph = True 
 save_figs   = False
 
 """i due modi per ottenere i param della weibull

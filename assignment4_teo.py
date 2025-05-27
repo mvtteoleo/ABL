@@ -77,7 +77,7 @@ def save(nome):
   if save__graph==True:
     plt.legend()
     plt.tight_layout()
-    plt.savefig('content/figure/'+str(nome)+'.pdf', format='pdf')
+    plt.savefig('figure/'+str(nome)+'.pdf', format='pdf')
     return None
   else:
     return None

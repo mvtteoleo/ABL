@@ -17,11 +17,6 @@ def fitWeibull_type1(dato):
   # from scipy import special.gamma
   mu = np.mean(dato)
   std = np.std(dato)
-  toll = 1e-5
-  res = 1
-  dk = toll/10
-  k = 0.1 - dk
-
   cost = (std/mu)**2 +1
 
   def residual(k):
@@ -149,38 +144,33 @@ def get_V50_Gumbell(X):
     return v50
 
 
-def get_V50_Weibull(this, X, verbose=False):
+def get_V50_Weibull(this, X=np.zeros(23), verbose=False):
     """
     input: this: numpy vector with velocities (Specific of the direction, agnostic of the year)
             X: numpy vector of maxima per each year (Specific of the direction, needed just to get the number of years)
-            Nu:integer number of measuraments to get the vector X
+            nu:integer number of measuraments to get the vector X
 
     output: float with V50 using Weibull method (of that sector)
     Generally the least relyable one ok if all other fail due to lack of datas
     """
     # Get A, k from fit Weibull of the datas
-    A, k = fitWeibull_type1(this)
-    Nu = len(this)
-    cie = 0.438*Nu
-    beta = A*(np.log(cie))**(1/k)
-    alpha =  (A/k)*(np.log(cie))**(1/(k - 1))
+    k, A = fitWeibull_type1(this)
+    nu = len(this)
     N = len(X)
+    cie = N*0.438
+    beta  = A*(np.log(cie))**(1/k)
+    alpha = (A/k)*(np.log(cie))**(1/(k - 1))
     v50 = alpha*np.log(50/N) + beta
     if verbose==True:
         print("************", dir )
         print(f"{k = :.2f}")
         print(f"{A = :.2f}")
         print(f"{cie = :.2f}")
-        print(f"{Nu = :.2f}")
+        print(f"{nu = :.2f}")
         print(f"{beta = :.2f}")
         print(f"{alpha = :.2f}")
         print(f"{v50 = :.2f}")
-    """
-    if(abs(v50) > 30):
-      v50 = 30
-      # print(f"{v50 = :.2e}, {alpha = :.2e}, {beta = :.2e} \n")
-    """
-    return v50*7
+    return v50
 
 
 save__graph = True 
@@ -196,9 +186,7 @@ save_figs   = False
 # dati utili
 z0_terra = 2e-2        #m
 z0_mare = 0.02e-2      #m
-z_ref = 70             #m
-z = 120                #m
-width = 90 # Width of the slice
+width = 30 # Width of the slice
 
 
 # # %%
@@ -230,6 +218,7 @@ df.replace({1: 99.99}, np.nan, inplace=True)
 df.replace({2: 999. }, np.nan, inplace=True)
 df.replace({3: 999. }, np.nan, inplace=True)
 # Drop invalid velocities
+df['vel'] = df[1]
 df = df.dropna(subset=[1])
 
 df['dirUni'] = df[2].fillna(df[3])
@@ -239,11 +228,16 @@ df = df.dropna(subset=['dirUni'])
 df['dirUni'] = df['dirUni'].replace( 360, 0 )
 df['slice'] = df['dirUni'].apply(lambda x: floor(x / width) )
 dir_max = int(df['slice'].max() +1)
-df['vel'] = df[1]
-
 df.head()
 
+this = df['vel'].loc[(df['dirUni']>170) & (df['dirUni']<180) & (df['anno']==1989)]
+ax = this.plot.hist( density = True, bins=200)
+k, A = fitWeibull_type1(this)
+U = np.linspace(0, 40, 100)
+plt.plot(U, Weibull(k, A, U))
+plt.show()
 
+exit()
 
 ## APPROACH 1 (V_50 IN SPROGO AND EXTRAPOLATE)
 
@@ -255,9 +249,15 @@ v_check     = np.zeros(dir_max)
 # Initialize the vector of maxima
 X = np.zeros(23)
 
+
+"""
+plt.plot(df['vel'])
+plt.show()
+"""
+
 # Plot Weibull fits
 if False:
-    for dir in range(0, int(df['slice'].max()) , 6):
+    for dir in range(0, dir_max, 6):
         ax = df.loc[(df['slice']==dir), 'vel'].plot.hist(column='vel', bins=200, density=True)
         this = df.loc[df['slice']==dir, 'vel']
         k, A = fitWeibull_type2_fast(this)
@@ -285,8 +285,6 @@ if False:
 
 # Get V50 in Sprogo
 for dir in range(0, dir_max):
-    to_weib = (df.loc[(df['slice']==dir), 'vel'])
-    v_50_Sprogo[1][dir] = get_V50_Weibull(to_weib, X)
     for anno in range(1977, 2000):
         this = np.array(df.loc[(df['anno']==anno) & (df['slice']==dir), 'vel'])
         X[int(anno - 1977)] = np.max(this)
@@ -296,7 +294,16 @@ for dir in range(0, dir_max):
     # Store v_50 in each place for each direction
     v_50_Sprogo[0][dir] = get_V50_PWM(X)
     v_50_Sprogo[2][dir] = get_V50_Gumbell(X)
+    to_weib = np.array(df.loc[(df['slice']==dir), 'vel'])
+    v_50_Sprogo[1][dir] = get_V50_Weibull(to_weib)
 print("Computed V50 in Sprogo")
+
+"""
+plt.plot(v_50_Sprogo[0])
+plt.plot(v_50_Sprogo[1])
+plt.plot(v_50_Sprogo[2])
+plt.show()
+"""
 
 # Extrapolate V_50 from Sprogo to Nyborg
 for dir in range(0, ceil(dir_max/2 - 0.5) ):
@@ -323,7 +330,7 @@ for dir in range(ceil(dir_max/2 - 0.5), dir_max):
 print(f"Extrapolated V50 from weasterly directions up to {dir = }")
 
 # PLot the v_50 in Sprogo Nyborg and Korsor
-if True:
+if False:
     # Sprogo v_50
     plt.plot(v_50_Sprogo[0],'o-',color = 'orange')
     plt.plot(v_50_Sprogo[1],'s-',color = 'orange')
@@ -367,7 +374,7 @@ if True:
 
 
 
-if True:
+if False:
     theta = np.radians([(2*x+1) * width/2 for x in range(dir_max)])  # Direction in degrees to radians
 
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
@@ -435,38 +442,20 @@ if True:
 
 
 
-### ## APPROACH 2 (EXTRAPOLATE FROM SPROGO AND GET  V50 IN PLACE)
-### 
-### # Extrapolate from Sprogo
-### # Case : wind -> land Sprogo sea (d) place_
-### df['Nyborg'] = df['vel'].apply(lambda x: extrapolate_U2(x, z0_terra, z0_mare) )
-### df['Korsor'] = df['vel'].apply(lambda x: extrapolate_U2(x, z0_terra, z0_mare) )
-### 
-### #filter if the there is land upwind
-### # Case : wind -> land place_ sea (d) Sprogo
-### df['Nyborg'] = df.loc[ (df['dirUni'] > 158 ) & (df['dirUni'] < 338), 'Nyborg' ].apply(lambda x: extrapolate_U2(x, z0_terra, z0_mare, downwind=False))
-### df['Korsor'] = df['Korsor'].loc[ (df['dirUni'] > 133 ) & (df['dirUni'] < 313) ].apply(lambda x: extrapolate_U2(x, z0_terra, z0_mare, downwind=False))
-### 
-### # GET V_50
-### # Matrix containing v50 for each of the 3 method for each direction
-### v_50_Nyborg = np.zeros([3, dir_max])
-### v_50_Korsor = np.zeros([3, dir_max])
-### v_check     = np.zeros(dir_max)
-### # Initialize the vector of maxima
-### X = np.zeros(23)
-### 
-### for dir in range(0, dir_max):
-###     to_weib = np.array(df.loc[(df['slice']==dir), 'Nyborg'])
-###     v_50_Nyborg[1][dir] = get_V50_Weibull(to_weib, X)
-###     for anno in range(1977, 2000):
-###         this = np.array(df.loc[(df['anno']==anno) & (df['slice']==dir), 'Nyborg'])
-###         X[int(anno - 1977)] = np.max(this)
-###     # Riordino il vettore in ordine crescente
-###     X = np.sort(X)
-###     v_check[dir] = np.mean(X)
-###     # Store v_50 in each place for each direction
-###     v_50_Nyborg[0][dir] = get_V50_PWM(X)
-###     # v_50_Nyborg[2][dir] = get_V50_Gumbell(X)
-###  
-### plt.plot(v_50_Nyborg[0])
-### plt.show()
+# EXTRAPOLATE ALL VALUES FROM SPROGO 
+
+df['Nyborg'] = df['vel']
+df['Korsor'] = df['vel']
+
+ax = plt.subplot(2, 1, 1)
+
+ax = df['Korsor'].plot.hist(column='Korsor', bins=200, color='yellow', density=True, label='oroginal')
+df['Korsor'] = df.loc[ (df['dirUni'] > 133) & (df['dirUni'] < 313), 'Korsor' ].apply(lambda x: extrapolate_U2(x, z0_mare, z0_terra, False)) 
+ax = df['Korsor'].plot.hist(column='Korsor', bins=200, color='red', density=True, label='extrap')
+
+ax = plt.subplot(2, 1, 2)
+ax = df['Nyborg'].plot.hist(column='Nyborg', bins=200, color='yellow', density=True, label='original')
+df['Nyborg'] = df.loc[ (df['dirUni'] > 158) & (df['dirUni'] < 338), 'Nyborg' ].apply(lambda x: extrapolate_U2(x, z0_mare, z0_terra, False)) 
+ax = df['Nyborg'].plot.hist(column='Nyborg', bins=200, color='red', label='extrap', density=True)
+
+plt.show()
